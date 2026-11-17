@@ -1,0 +1,1635 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>포켓몬 오토체스 - 궁극의 최종판</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Pretendard', sans-serif;
+            user-select: none;
+            background-color: #030712;
+            color: #f8fafc;
+            overflow-x: hidden;
+        }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 9999px; }
+
+        .board-cell {
+            transition: all 0.16s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+        }
+        .board-cell:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 0 16px rgba(56, 189, 248, 0.4);
+            border-color: rgba(56, 189, 248, 0.8);
+        }
+        .board-cell.drag-over {
+            background-color: rgba(16, 185, 129, 0.3) !important;
+            border-color: #10b981 !important;
+            transform: scale(1.05);
+        }
+
+        .row-front { background: linear-gradient(180deg, rgba(244,63,94,0.16) 0%, rgba(15,23,42,0.92) 100%); }
+        .row-mid   { background: linear-gradient(180deg, rgba(245,158,11,0.12) 0%, rgba(15,23,42,0.92) 100%); }
+        .row-back  { background: linear-gradient(180deg, rgba(56,189,248,0.16) 0%, rgba(15,23,42,0.92) 100%); }
+
+        .poke-sprite {
+            image-rendering: pixelated;
+            transition: transform 0.18s ease, filter 0.18s ease;
+            filter: drop-shadow(0 4px 6px rgba(0,0,0,0.7));
+        }
+
+        @keyframes coin-glow {
+            0%, 100% { transform: scale(1); box-shadow: 0 0 10px rgba(250, 204, 21, 0.7); }
+            50% { transform: scale(1.18); box-shadow: 0 0 20px rgba(250, 204, 21, 1); }
+        }
+        @keyframes carousel-spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .interest-coin-active { animation: coin-glow 2s infinite ease-in-out; }
+        .carousel-wheel { animation: carousel-spin 22s linear infinite; }
+        #fx-layer { position: fixed; inset: 0; pointer-events: none; z-index: 80; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between text-base">
+
+    <div id="fx-layer"></div>
+
+    <!-- 상단 대형 HUD 바 -->
+    <header class="bg-slate-900/95 border-b border-slate-800 px-4 py-3 shadow-2xl z-30 backdrop-blur-md">
+        <div class="max-w-[1500px] mx-auto flex flex-wrap items-center justify-between gap-4">
+            
+            <div class="flex items-center gap-4">
+                <div class="flex items-center gap-3">
+                    <span class="text-3xl">🌟</span>
+                    <div>
+                        <h1 class="text-xl md:text-2xl font-black bg-gradient-to-r from-amber-300 via-yellow-400 to-rose-400 bg-clip-text text-transparent leading-tight">
+                            포켓몬 오토체스 <span class="text-xs text-amber-400 bg-amber-950 px-2 py-0.5 rounded border border-amber-800">궁극의 최종판</span>
+                        </h1>
+                        <div class="text-xs text-slate-400 font-semibold">데미지 팝업 숫자 효과 · 스킬 파티클 강화 · 초보자 가이드탑재</div>
+                    </div>
+                </div>
+
+                <div class="bg-slate-950 border border-slate-800 px-4 py-2 rounded-2xl flex items-center gap-3 shadow-inner">
+                    <span id="stage-badge" class="text-amber-400 font-black text-base">라운드 1-1</span>
+                    <span class="text-slate-700">|</span>
+                    <span id="phase-badge" class="bg-sky-500/20 text-sky-300 border border-sky-500/30 px-3 py-1 rounded-xl text-sm font-extrabold">
+                        준비 페이즈
+                    </span>
+                </div>
+
+                <div id="active-augments-bar" class="hidden xl:flex items-center gap-2"></div>
+            </div>
+
+            <!-- 중앙 자원 HUD -->
+            <div class="flex flex-wrap items-center gap-4 bg-slate-950/95 border border-slate-800 px-5 py-2.5 rounded-2xl shadow-xl">
+                <div class="flex items-center gap-2.5 pr-3 border-r border-slate-800">
+                    <span class="text-rose-500 text-2xl">❤️</span>
+                    <div>
+                        <div class="text-[10px] text-slate-400 font-bold">전설이 체력</div>
+                        <div id="hud-hp" class="text-base font-black text-rose-400">100 HP</div>
+                    </div>
+                </div>
+
+                <div id="gold-hud-target" class="flex items-center gap-3 pr-3 border-r border-slate-800">
+                    <div class="flex items-center gap-2">
+                        <span class="text-2xl">🪙</span>
+                        <div>
+                            <div class="text-[10px] text-slate-400 font-bold">보유 코인</div>
+                            <div id="hud-gold" class="text-base font-black text-amber-400">14 G</div>
+                        </div>
+                    </div>
+                    <div class="flex flex-col items-start">
+                        <div class="text-[10px] text-amber-300 font-bold mb-0.5">이자 코인 (<span id="hud-interest-text">+1G</span>)</div>
+                        <div id="interest-coins-container" class="flex items-center gap-1.5"></div>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-2.5 pr-3 border-r border-slate-800">
+                    <span id="streak-icon" class="text-xl">🔥</span>
+                    <div>
+                        <div class="text-[10px] text-slate-400 font-bold">연승/연패</div>
+                        <div id="hud-streak" class="text-sm font-extrabold text-purple-300">0연승 (+0G)</div>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-2.5">
+                    <span class="text-cyan-400 text-2xl">⭐</span>
+                    <div>
+                        <div class="text-[10px] text-slate-400 font-bold">레벨 <span id="hud-level" class="text-cyan-300 font-black">Lv.1</span></div>
+                        <div class="w-28 bg-slate-800 h-2.5 rounded-full overflow-hidden mt-0.5">
+                            <div id="hud-exp-bar" class="bg-gradient-to-r from-cyan-400 to-blue-500 h-full transition-all duration-300" style="width: 0%"></div>
+                        </div>
+                        <div class="text-[10px] text-slate-400 font-semibold mt-0.5"><span id="hud-exp">0</span> / <span id="hud-max-exp">2</span> EXP</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 우측 버튼 -->
+            <div class="flex items-center gap-3">
+                <button onclick="toggleRecipeModal(true)" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-amber-300 px-4 py-3 rounded-2xl text-sm font-extrabold transition flex items-center gap-2 shadow-lg">
+                    📘 조합표
+                </button>
+                <button id="btn-mute" onclick="toggleMute()" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 px-3.5 py-3 rounded-2xl text-sm font-bold transition shadow-lg">
+                    🔊
+                </button>
+                <button id="btn-battle" onclick="startBattle()" class="bg-gradient-to-r from-emerald-400 to-teal-500 hover:from-emerald-300 hover:to-teal-400 text-slate-950 font-black px-8 py-3.5 rounded-2xl shadow-xl shadow-emerald-950/70 transition transform active:scale-95 text-base md:text-lg flex items-center gap-2">
+                    ⚔️ 전투 시작!
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- 메인 전술 레이아웃 -->
+    <main class="flex-1 max-w-[1500px] w-full mx-auto p-4 grid grid-cols-1 lg:grid-cols-12 gap-4">
+
+        <!-- 좌측 패널: 시너지 & 딜량 미터기 + 아이템 창고 -->
+        <aside class="lg:col-span-3 flex flex-col gap-4">
+            <div class="bg-slate-900/90 border border-slate-800 rounded-3xl p-4 shadow-2xl flex flex-col flex-1 min-h-[300px]">
+                <div class="flex items-center gap-2 bg-slate-950 p-1.5 rounded-2xl border border-slate-800 mb-3">
+                    <button id="tab-synergy" onclick="switchLeftTab('synergy')" class="flex-1 py-2 rounded-xl text-sm font-extrabold bg-slate-800 text-amber-400 shadow transition">
+                        ⚡ 타입 시너지
+                    </button>
+                    <button id="tab-damage" onclick="switchLeftTab('damage')" class="flex-1 py-2 rounded-xl text-sm font-extrabold text-slate-400 hover:text-slate-200 transition">
+                        📊 딜량 미터기
+                    </button>
+                </div>
+
+                <div id="panel-synergy" class="flex-1 overflow-y-auto space-y-2 pr-1">
+                    <div class="text-sm text-slate-500 italic text-center py-8">포켓몬을 필드에 배치하면 시너지가 활성화됩니다.</div>
+                </div>
+                <div id="panel-damage" class="hidden flex-1 overflow-y-auto space-y-2.5 pr-1">
+                    <div class="text-sm text-slate-500 italic text-center py-8">전투 시작 후 피해량이 집계됩니다.</div>
+                </div>
+            </div>
+
+            <!-- 아이템 창고 -->
+            <div class="bg-slate-900/90 border border-slate-800 rounded-3xl p-4 shadow-2xl">
+                <div class="flex justify-between items-center mb-2.5">
+                    <span class="text-sm font-extrabold text-amber-400 flex items-center gap-1.5">🎒 아이템 창고 (<span id="item-count">0</span>/10)</span>
+                    <span class="text-xs text-slate-400">클릭 후 포켓몬에게 장착</span>
+                </div>
+                <div id="item-inventory" class="grid grid-cols-5 gap-2 bg-slate-950/90 p-3 rounded-2xl border border-slate-800/80 min-h-[100px]"></div>
+                <div id="selected-item-banner" class="mt-2.5 text-xs text-cyan-300 bg-cyan-950/50 border border-cyan-800/60 rounded-xl px-3 py-2 hidden"></div>
+            </div>
+        </aside>
+
+        <!-- 중앙 전장 -->
+        <section class="lg:col-span-6 flex flex-col gap-3 bg-slate-900/85 border border-slate-800 rounded-3xl p-4 shadow-2xl relative">
+            
+            <div id="normal-battle-arena" class="flex flex-col gap-3">
+                <div class="flex justify-between items-center px-1">
+                    <div class="flex items-center gap-2.5">
+                        <span class="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping"></span>
+                        <span class="text-sm font-extrabold text-rose-400">적 진영 (웨이브 전투)</span>
+                    </div>
+                    <span id="enemy-wave-label" class="text-xs text-rose-300 font-bold bg-rose-950/60 px-3 py-1 rounded-xl border border-rose-800">
+                        라운드 1-1 대기중
+                    </span>
+                </div>
+
+                <div id="enemy-board" class="grid grid-cols-7 gap-2 bg-slate-950/80 p-3 rounded-2xl border border-rose-950/50"></div>
+
+                <div class="relative flex items-center justify-center my-1">
+                    <div class="h-px bg-slate-800 flex-1"></div>
+                    <div id="battle-banner" class="mx-3 px-5 py-1.5 rounded-full bg-slate-950 border border-slate-700 text-sm font-extrabold text-slate-200 shadow-lg">
+                        포켓몬을 배치하고 전투를 시작하세요 (우클릭 또는 E: 판매)
+                    </div>
+                    <div class="h-px bg-slate-800 flex-1"></div>
+                </div>
+
+                <div class="flex justify-between items-center px-1">
+                    <div class="flex items-center gap-2.5">
+                        <span class="w-2.5 h-2.5 rounded-full bg-cyan-400"></span>
+                        <span class="text-sm font-extrabold text-cyan-400">아군 전장 (<span id="board-unit-count">0</span>/<span id="board-unit-max">1</span>명)</span>
+                    </div>
+                    <div class="flex items-center gap-2 text-xs font-bold">
+                        <span class="text-rose-400 bg-rose-950/70 px-2.5 py-1 rounded-lg border border-rose-800/50">🛡️ 1열: 앞라인(탱커)</span>
+                        <span class="text-sky-400 bg-sky-950/70 px-2.5 py-1 rounded-lg border border-sky-800/50">🎯 3열: 뒷라인(원딜)</span>
+                    </div>
+                </div>
+
+                <div id="ally-board" class="grid grid-cols-7 gap-2 bg-slate-950/80 p-3 rounded-2xl border border-cyan-950/50"></div>
+            </div>
+
+            <!-- 초밥집 아레나 -->
+            <div id="carousel-arena" class="hidden flex flex-col items-center justify-center py-12 gap-6 relative min-h-[500px] bg-slate-950/90 rounded-3xl border-2 border-amber-500/50">
+                <div class="text-center">
+                    <div class="inline-block bg-amber-500/20 text-amber-300 border border-amber-400/50 px-4 py-1.5 rounded-full text-sm font-black mb-2">
+                        🍣 공동 선택 '초밥집' 페이즈
+                    </div>
+                    <h2 class="text-2xl font-black text-white">원하는 포켓몬과 아이템을 클릭해 획득하세요!</h2>
+                </div>
+                <div id="carousel-wheel" class="relative w-[340px] h-[340px] rounded-full border-4 border-dashed border-amber-500/60 carousel-wheel flex items-center justify-center"></div>
+            </div>
+
+            <div id="round-summary-banner" class="hidden absolute inset-x-8 top-1/2 -translate-y-1/2 bg-slate-900/98 border-2 border-amber-400/80 rounded-3xl p-6 shadow-2xl z-40 text-center backdrop-blur-md">
+                <div id="summary-title" class="text-xl font-black text-amber-400 mb-2">🎉 라운드 승리!</div>
+                <div id="summary-breakdown" class="text-sm text-slate-200 font-semibold space-y-1.5"></div>
+            </div>
+        </section>
+
+        <!-- 우측 패널: 인스펙터 + 대기 벤치 -->
+        <aside class="lg:col-span-3 flex flex-col gap-4">
+            <div class="bg-slate-900/90 border border-slate-800 rounded-3xl p-4 shadow-2xl flex flex-col justify-between min-h-[310px]">
+                <div class="flex justify-between items-center border-b border-slate-800 pb-2.5 mb-2.5">
+                    <span class="text-sm font-extrabold text-slate-300 flex items-center gap-2">🔍 포켓몬 전술 정보</span>
+                    <div class="flex items-center gap-2">
+                        <button id="btn-unequip" onclick="unequipItems()" class="hidden bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-extrabold px-3 py-1.5 rounded-xl transition shadow border border-slate-700">
+                            아이템 회수
+                        </button>
+                        <button id="btn-sell-unit" onclick="sellSelectedUnit()" class="hidden bg-rose-600 hover:bg-rose-500 text-white text-xs font-extrabold px-3 py-1.5 rounded-xl transition shadow">
+                            판매 (+1G)
+                        </button>
+                    </div>
+                </div>
+                <div id="unit-inspector" class="flex-1 flex flex-col justify-center">
+                    <div class="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 text-left space-y-2.5">
+                        <div class="flex items-center gap-3">
+                            <img src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/19.png" class="w-14 h-14 poke-sprite bg-slate-900 rounded-2xl p-1 border border-slate-800">
+                            <div>
+                                <div class="text-sm font-black text-slate-100 flex items-center gap-2">
+                                    가이드: 꼬렛 <span class="text-xs text-amber-400">1코스트</span>
+                                </div>
+                                <span class="inline-block mt-1 text-xs font-extrabold px-2.5 py-1 rounded-lg bg-rose-500/20 text-rose-300 border border-rose-500/40">
+                                    🛡️ 앞라인 전사 (1열 추천)
+                                </span>
+                            </div>
+                        </div>
+                        <p class="text-xs text-slate-300 leading-relaxed">
+                            • 초보자 가이드: 탱커는 1열, 딜러는 3열에 배치하세요!<br>
+                            • 포켓몬을 클릭해 상세 정보를 확인하고 아이템을 장착할 수 있습니다. (E키 빠른 판매)
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 대기 벤치 (9칸) -->
+            <div class="bg-slate-900/90 border border-slate-800 rounded-3xl p-4 shadow-2xl flex-1 flex flex-col">
+                <div class="flex justify-between items-center mb-2.5 px-0.5">
+                    <span class="text-sm font-extrabold text-amber-400">🪑 대기 벤치 (<span id="bench-count">0</span>/9)</span>
+                    <span class="text-xs text-slate-400">동일 포켓몬 3마리 = 자동 진화</span>
+                </div>
+                <div id="bench-board" class="grid grid-cols-3 gap-2 bg-slate-950/90 p-3 rounded-2xl border border-slate-800 flex-1"></div>
+            </div>
+        </aside>
+    </main>
+
+    <!-- 하단 상점 및 조작 패널 -->
+    <footer class="bg-slate-900/95 border-t border-slate-800 p-4 shadow-2xl z-30">
+        <div class="max-w-[1500px] mx-auto flex flex-col lg:flex-row items-center justify-between gap-4">
+            
+            <div class="flex flex-col gap-2.5 w-full lg:w-auto">
+                <div class="flex items-center justify-between gap-3 bg-slate-950 px-4 py-2 rounded-2xl border border-slate-800 text-xs font-bold">
+                    <span class="text-slate-400">상점 등장 확률:</span>
+                    <span class="text-slate-300">⚪1코 <b id="prob-1" class="text-white">100%</b></span>
+                    <span class="text-emerald-400">🟢2코 <b id="prob-2">0%</b></span>
+                    <span class="text-sky-400">🔵3코 <b id="prob-3">0%</b></span>
+                    <span class="text-purple-400">🟣4코 <b id="prob-4">0%</b></span>
+                    <span class="text-amber-400">🟡5코 <b id="prob-5">0%</b></span>
+                </div>
+
+                <div class="grid grid-cols-3 gap-3">
+                    <button onclick="buyExp()" class="bg-gradient-to-b from-cyan-600 to-blue-700 hover:from-cyan-500 hover:to-blue-600 text-white px-4 py-3 rounded-2xl font-extrabold text-sm flex flex-col items-center shadow-lg transition active:scale-95">
+                        <span>✨ 경험치 구매</span>
+                        <span class="text-amber-300 text-xs font-black">4 G (+4 EXP)</span>
+                    </button>
+                    <button onclick="rerollShop(false)" class="bg-gradient-to-b from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 px-4 py-3 rounded-2xl font-black text-sm flex flex-col items-center shadow-lg transition active:scale-95">
+                        <span>🔄 상점 새로고침</span>
+                        <span id="reroll-cost-label" class="text-slate-950 text-xs font-black">2 G</span>
+                    </button>
+                    <button id="btn-lock-shop" onclick="toggleShopLock()" class="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 px-4 py-3 rounded-2xl font-extrabold text-sm flex flex-col items-center shadow-lg transition active:scale-95">
+                        <span id="lock-icon">🔓 상점 잠금</span>
+                        <span id="lock-status" class="text-xs text-slate-400">해제됨</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 5개 상점 슬롯 -->
+            <div id="shop-slots" class="grid grid-cols-5 gap-3 w-full lg:flex-1 max-w-4xl"></div>
+        </div>
+    </footer>
+
+    <!-- 증강체 모달 -->
+    <div id="augment-modal" class="fixed inset-0 bg-black/85 backdrop-blur-md z-50 hidden flex items-center justify-center p-6">
+        <div class="bg-slate-900 border-2 border-amber-400/70 rounded-3xl max-w-4xl w-full p-8 shadow-2xl text-center">
+            <div class="inline-block bg-amber-500/20 text-amber-300 border border-amber-400/50 px-4 py-1.5 rounded-full text-sm font-black mb-3">
+                ✨ 마법공학 포켓몬 증강체 선택
+            </div>
+            <h2 class="text-3xl font-black text-white mb-2">전장을 지배할 증강체를 선택하세요!</h2>
+            <div id="augment-choices" class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6"></div>
+        </div>
+    </div>
+
+    <!-- 아이템 조합표 모달 -->
+    <div id="recipe-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-6" onclick="toggleRecipeModal(false)">
+        <div class="bg-slate-900 border border-slate-700 rounded-3xl max-w-3xl w-full p-8 shadow-2xl" onclick="event.stopPropagation()">
+            <div class="flex justify-between items-center border-b border-slate-800 pb-4 mb-5">
+                <h3 class="text-xl font-black text-amber-400">📘 아이템 조합 가이드</h3>
+                <button onclick="toggleRecipeModal(false)" class="text-slate-400 hover:text-white text-xl font-bold">✕</button>
+            </div>
+            <div id="recipe-list" class="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[65vh] overflow-y-auto pr-2"></div>
+        </div>
+    </div>
+
+    <!-- 게임 종료 모달 -->
+    <div id="gameover-modal" class="fixed inset-0 bg-black/85 backdrop-blur-md z-50 hidden flex items-center justify-center p-6">
+        <div class="bg-slate-900 border-2 border-amber-400/60 rounded-3xl max-w-md w-full p-8 text-center shadow-2xl space-y-5">
+            <div id="gameover-emoji" class="text-6xl">🏆</div>
+            <h2 id="gameover-title" class="text-3xl font-black text-amber-400">게임 종료</h2>
+            <p id="gameover-desc" class="text-sm text-slate-300 leading-relaxed"></p>
+            <button onclick="location.reload()" class="w-full bg-gradient-to-r from-amber-400 to-orange-500 text-slate-950 font-black py-4 rounded-2xl shadow-xl hover:brightness-110 transition text-lg">
+                새 게임 시작하기
+            </button>
+        </div>
+    </div>
+
+    <div id="toast" class="fixed top-24 left-1/2 -translate-x-1/2 bg-slate-900/98 text-amber-300 border-2 border-amber-500/60 px-6 py-3 rounded-2xl text-sm font-extrabold shadow-2xl z-50 opacity-0 transition-opacity duration-300 pointer-events-none">
+        알림
+    </div>
+
+    <script>
+        const SoundFX = (() => {
+            let ctx = null;
+            let muted = false;
+            function getCtx() {
+                if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+                if (ctx.state === 'suspended') ctx.resume();
+                return ctx;
+            }
+            function playTone(freq, type, duration, vol = 0.12, delay = 0) {
+                if (muted) return;
+                try {
+                    const ac = getCtx();
+                    const osc = ac.createOscillator();
+                    const gain = ac.createGain();
+                    osc.type = type;
+                    osc.frequency.setValueAtTime(freq, ac.currentTime + delay);
+                    gain.gain.setValueAtTime(vol, ac.currentTime + delay);
+                    gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + delay + duration);
+                    osc.connect(gain);
+                    gain.connect(ac.destination);
+                    osc.start(ac.currentTime + delay);
+                    osc.stop(ac.currentTime + delay + duration);
+                } catch (e) {}
+            }
+            return {
+                toggleMute() { muted = !muted; return muted; },
+                coin() { playTone(1200, 'sine', 0.12, 0.12); playTone(1650, 'sine', 0.18, 0.12, 0.06); },
+                buy() { playTone(520, 'triangle', 0.1, 0.15); playTone(780, 'triangle', 0.14, 0.15, 0.05); },
+                starUp() {
+                    playTone(523.25, 'triangle', 0.15, 0.18, 0);
+                    playTone(659.25, 'triangle', 0.15, 0.18, 0.08);
+                    playTone(783.99, 'triangle', 0.15, 0.18, 0.16);
+                    playTone(1046.5, 'sine', 0.35, 0.22, 0.24);
+                },
+                hit() { playTone(180, 'sawtooth', 0.08, 0.08); },
+                skill() { playTone(440, 'sawtooth', 0.2, 0.12); playTone(880, 'sine', 0.28, 0.14, 0.08); },
+                win() { [523, 659, 784, 1046].forEach((f, i) => playTone(f, 'triangle', 0.22, 0.16, i * 0.1)); }
+            };
+        })();
+
+        function toggleMute() {
+            const isMuted = SoundFX.toggleMute();
+            document.getElementById('btn-mute').innerText = isMuted ? '🔇' : '🔊';
+            showToast(isMuted ? '효과음 음소거됨' : '효과음 켜짐');
+        }
+
+        const SPRITE_URL = (dexId) => `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${dexId}.png`;
+
+        const POKEMON_DB = [
+            { id: 'rattata', dex: 19, name: '꼬렛', cost: 1, types: ['노말'], line: 'front', role: '앞라인 탱커', hp: 520, atk: 52, ap: 100, armor: 25, range: 1, skillName: '필살앞니', skillDmg: 150, skillDesc: '대상을 물어뜯어 물리 피해를 줍니다.', icon: '🐀' },
+            { id: 'caterpie', dex: 10, name: '캐터피', cost: 1, types: ['벌레', '풀'], line: 'front', role: '앞라인 탱커', hp: 600, atk: 38, ap: 100, armor: 35, range: 1, skillName: '회복의실', skillDmg: 90, skillDesc: '피해를 주고 체력을 140 회복합니다.', icon: '🐛' },
+            { id: 'pidgey', dex: 16, name: '구구', cost: 1, types: ['노말', '비행'], line: 'back', role: '뒷라인 원딜', hp: 430, atk: 58, ap: 100, armor: 15, range: 3, skillName: '에어슬래시', skillDmg: 165, skillDesc: '바람 칼날로 원거리 적을 타격합니다.', icon: '🐦' },
+            { id: 'nidoran', dex: 32, name: '니드런♂', cost: 1, types: ['독'], line: 'front', role: '앞라인 탱커', hp: 550, atk: 50, ap: 100, armor: 28, range: 1, skillName: '독찌르기', skillDmg: 155, skillDesc: '맹독 뿔로 마법 피해를 입힙니다.', icon: '🦔' },
+            { id: 'machop', dex: 66, name: '알통몬', cost: 1, types: ['격투'], line: 'front', role: '앞라인 탱커', hp: 580, atk: 56, ap: 100, armor: 30, range: 1, skillName: '카라테찹', skillDmg: 160, skillDesc: '수행한 주먹으로 강력한 타격을 가합니다.', icon: '🥊' },
+
+            { id: 'pikachu', dex: 25, name: '피카츄', cost: 2, types: ['전기'], line: 'back', role: '뒷라인 마법사', hp: 560, atk: 65, ap: 100, armor: 18, range: 3, skillName: '10만볼트', skillDmg: 240, skillDesc: '번개를 내려쳐 광역 피해를 줍니다.', icon: '⚡' },
+            { id: 'charmander', dex: 4, name: '파이리', cost: 2, types: ['불꽃'], line: 'mid', role: '중열 화염술사', hp: 620, atk: 72, ap: 100, armor: 22, range: 2, skillName: '화염방사', skillDmg: 230, skillDesc: '뜨거운 불꽃으로 적을 태웁니다.', icon: '🔥' },
+            { id: 'squirtle', dex: 7, name: '꼬부기', cost: 2, types: ['물'], line: 'front', role: '앞라인 탱커', hp: 780, atk: 48, ap: 100, armor: 45, range: 1, skillName: '물대포', skillDmg: 140, skillDesc: '보호막 200과 함께 물줄기를 발사합니다.', icon: '💧' },
+            { id: 'geodude', dex: 74, name: '꼬마돌', cost: 2, types: ['바위'], line: 'front', role: '앞라인 탱커', hp: 820, atk: 52, ap: 100, armor: 50, range: 1, skillName: '락블레스트', skillDmg: 175, skillDesc: '돌멩이를 연속 투척합니다.', icon: '🗿' },
+
+            { id: 'gengar', dex: 94, name: '팬텀', cost: 3, types: ['고스트', '독'], line: 'back', role: '뒷라인 원딜', hp: 690, atk: 88, ap: 100, armor: 20, range: 3, skillName: '섀도볼', skillDmg: 340, skillDesc: '어둠의 파동으로 폭발적 피해를 줍니다.', icon: '👻' },
+            { id: 'machoke', dex: 67, name: '근육몬', cost: 3, types: ['격투'], line: 'front', role: '앞라인 탱커', hp: 960, atk: 85, ap: 100, armor: 40, range: 1, skillName: '폭발펀치', skillDmg: 290, skillDesc: '정권 찌르기로 적 전열을 분쇄합니다.', icon: '💪' },
+            { id: 'jolteon', dex: 135, name: '쥬피썬더', cost: 3, types: ['전기', '노말'], line: 'back', role: '뒷라인 원딜', hp: 720, atk: 95, ap: 100, armor: 22, range: 3, skillName: '바늘미사일', skillDmg: 310, skillDesc: '초고속 전격 바늘을 난사합니다.', icon: '🦊' },
+
+            { id: 'charizard', dex: 6, name: '리자몽', cost: 4, types: ['불꽃', '비행'], line: 'back', role: '뒷라인 원딜', hp: 980, atk: 115, ap: 100, armor: 32, range: 3, skillName: '블래스트번', skillDmg: 440, skillDesc: '화염 폭발로 전장을 초토화합니다.', icon: '🐉' },
+            { id: 'blastoise', dex: 9, name: '거북왕', cost: 4, types: ['물'], line: 'front', role: '앞라인 탱커', hp: 1350, atk: 80, ap: 100, armor: 65, range: 1, skillName: '하이드로펌프', skillDmg: 340, skillDesc: '초고압 물줄기와 350 보호막을 얻습니다.', icon: '🐢' },
+            { id: 'golem', dex: 76, name: '딱구리', cost: 4, types: ['바위'], line: 'front', role: '앞라인 탱커', hp: 1420, atk: 88, ap: 100, armor: 60, range: 1, skillName: '지진', skillDmg: 360, skillDesc: '대지를 뒤흔들어 광역 바위 피해를 줍니다.', icon: '🪨' },
+
+            { id: 'mewtwo', dex: 150, name: '뮤츠', cost: 5, types: ['에스퍼'], line: 'back', role: '뒷라인 원딜', hp: 1180, atk: 145, ap: 100, armor: 35, range: 4, skillName: '사이코브레이크', skillDmg: 680, skillDesc: '염동력 파멸파동으로 적 전체에 엄청난 피해.', icon: '🔮' },
+            { id: 'dragonite', dex: 149, name: '망나뇽', cost: 5, types: ['드래곤', '비행'], line: 'front', role: '앞라인 탱커', hp: 1480, atk: 140, ap: 100, armor: 55, range: 1, skillName: '용성군', skillDmg: 620, skillDesc: '하늘에서 유성을 떨어뜨려 적 전체를 폭격합니다.', icon: '🐲' }
+        ];
+
+        const SYNERGY_DATA = {
+            '불꽃': { icon: '🔥', tiers: [2, 3], desc: '불꽃 아군 공격력 +25% / +55%', bonus: [0.25, 0.55] },
+            '물':   { icon: '💧', tiers: [2, 3], desc: '물 아군 최대 체력 +25% / +55%', bonus: [0.25, 0.55] },
+            '풀':   { icon: '🌿', tiers: [2],    desc: '아군 전체 매 공격 시 체력 28 회복', bonus: [28] },
+            '전기': { icon: '⚡', tiers: [2],    desc: '전기 아군 마나 회복량 2배 (스킬 난사)', bonus: [2] },
+            '노말': { icon: '⭐', tiers: [2, 3], desc: '아군 전체 공격력 & 체력 +15% / +30%', bonus: [0.15, 0.30] },
+            '독':   { icon: '☠️', tiers: [2],    desc: '공격 시 적 최대 체력의 5% 추가 독 피해', bonus: [0.05] },
+            '비행': { icon: '🕊️', tiers: [2],    desc: '비행 아군 사거리 +1칸 & 치명타율 +30%', bonus: [0.30] },
+            '고스트':{ icon: '👻', tiers: [1],   desc: '스킬 피해량 +35% 증폭', bonus: [0.35] },
+            '격투': { icon: '🥊', tiers: [1],    desc: '방어력 무시 및 물리 피해 +30%', bonus: [0.30] },
+            '에스퍼':{ icon: '🔮', tiers: [1],   desc: '전투 시작 시 마나 60 보유 (즉시 스킬)', bonus: [60] },
+            '드래곤':{ icon: '🐲', tiers: [1],   desc: '전설의 위엄: 체력 +500 & 공격력 +40%', bonus: [0.40] },
+            '바위': { icon: '🪨', tiers: [2],    desc: '아군 전체 방어력 +35 및 시작 보호막 150', bonus: [35, 150] },
+            '얼음': { icon: '❄️', tiers: [2],    desc: '적을 공격할 때마다 2초간 공격 속도 25% 감소', bonus: [0.25] },
+            '강철': { icon: '🛡️', tiers: [2],    desc: '아군 전체 방어력 +45 및 매 초 체력 15 재생', bonus: [45, 15] }
+        };
+
+        const LEVEL_TABLE = {
+            1: { maxUnits: 1, expNeeded: 2,  probs: [100, 0,  0,  0,  0] },
+            2: { maxUnits: 2, expNeeded: 4,  probs: [75,  25, 0,  0,  0] },
+            3: { maxUnits: 3, expNeeded: 6,  probs: [55,  30, 15, 0,  0] },
+            4: { maxUnits: 4, expNeeded: 10, probs: [40,  33, 20, 7,  0] },
+            5: { maxUnits: 5, expNeeded: 16, probs: [25,  35, 25, 12, 3] },
+            6: { maxUnits: 6, expNeeded: 24, probs: [18,  27, 32, 18, 5] },
+            7: { maxUnits: 7, expNeeded: 36, probs: [12,  20, 33, 25, 10] },
+            8: { maxUnits: 8, expNeeded: 99, probs: [8,   15, 27, 32, 18] }
+        };
+
+        const BASE_ITEMS = {
+            sword: { id: 'sword', name: 'B.F. 대검', icon: '🗡️', statText: '공격력 +25', atk: 25 },
+            rod:   { id: 'rod',   name: '쓸데없이 큰 지팡이', icon: '🪄', statText: '스킬 피해 +30%', apPct: 0.30 },
+            belt:  { id: 'belt',  name: '거인의 허리띠', icon: '🥋', statText: '최대 체력 +250', hp: 250 },
+            vest:  { id: 'vest',  name: '쇠사슬 조끼', icon: '🛡️', statText: '방어력 +25', armor: 25 },
+            tear:  { id: 'tear',  name: '여신의 눈물', icon: '💧', statText: '시작 마나 +30', startMana: 30 }
+        };
+
+        const COMBINED_RECIPES = {
+            'sword+sword': { id: 'ie', name: '무한의 대검', icon: '⚔️', desc: '공격력 +65', atk: 65, apPct: 0.40 },
+            'rod+rod':     { id: 'rabadon', name: '라바돈의 죽음모자', icon: '🎩', desc: '스킬 피해량 +85%', apPct: 0.85 },
+            'belt+belt':   { id: 'warmog', name: '워모그의 갑옷', icon: '💚', desc: '최대 체력 +750', hp: 750, regen: 70 },
+            'vest+vest':   { id: 'thornmail', name: '가시 갑옷', icon: '🦔', desc: '방어력 +65', armor: 65, reflect: 60 },
+            'tear+tear':   { id: 'bluebuff', name: '푸른 파수꾼', icon: '🔷', desc: '시작 마나 +60', startMana: 60, manaOnHit: 15 },
+            'rod+sword':   { id: 'gunblade', name: '마법공학 총검', icon: '🔫', desc: '공격력 +35, 주문력 +40%', atk: 35, apPct: 0.40, omnivamp: 0.25 },
+            'sword+tear':  { id: 'shojin', name: '쇼진의 창', icon: '🔱', desc: '공격력 +30', atk: 30, startMana: 30, manaOnHit: 20 },
+            'belt+sword':  { id: 'sterak', name: '스테락의 도전', icon: '🥊', desc: '체력 +350, 공격력 +40', hp: 350, atk: 40 },
+            'belt+rod':    { id: 'morello', name: '모렐로노미콘', icon: '📕', desc: '체력 +350, 스킬 피해 +45%', hp: 350, apPct: 0.45 },
+            'belt+vest':   { id: 'sunfire', name: '태양불꽃 망토', icon: '☀️', desc: '체력 +400, 방어력 +35', hp: 400, armor: 35 },
+            'rod+vest':    { id: 'locket', name: '솔라리 펜던트', icon: '📿', desc: '방어력 +35, 보호막 250', armor: 35, shield: 250 },
+            'sword+vest':  { id: 'ga', name: '수호 천사', icon: '👼', desc: '공격력 +35, 방어력 +35', atk: 35, armor: 35, hp: 200 },
+            'rod+tear':    { id: 'archangel', name: '대천사의 지팡이', icon: '🔮', desc: '스킬 피해 +50%', apPct: 0.50, startMana: 40 },
+            'tear+vest':   { id: 'frozen', name: '얼어붙은 심장', icon: '❄️', desc: '방어력 +40', armor: 40, startMana: 40 },
+            'belt+tear':   { id: 'redemption', name: '구원', icon: '✨', desc: '체력 +400', hp: 400, startMana: 35 }
+        };
+
+        function getCombinedItem(id1, id2) {
+            const key = [id1, id2].sort().join('+');
+            return COMBINED_RECIPES[key] || null;
+        }
+
+        const AUGMENTS_POOL = [
+            { id: 'rich_get_richer', tier: '골드', icon: '💰', name: '부익부', desc: '즉시 +14골드를 획득하고, 최대 이자 코인이 7개로 확장됩니다!' },
+            { id: 'golden_ticket', tier: '프리즘', icon: '🎟️', name: '황금 티켓', desc: '상점 새로고침 비용이 1G로 영구 할인됩니다!' },
+            { id: 'combat_training', tier: '실버', icon: '⚔️', name: '전투 훈련', desc: '아군 모든 포켓몬의 공격력이 +25% 증가합니다.' },
+            { id: 'cybernetic_bulk', tier: '골드', icon: '🛡️', name: '거인의 결의', desc: '아군 모든 포켓몬의 최대 체력이 +320 증가합니다.' },
+            { id: 'pandora_items', tier: '골드', icon: '🎁', name: '보물 창고', desc: '즉시 무작위 기본 아이템 2개와 +8골드를 획득합니다.' },
+            { id: 'mana_battery', tier: '실버', icon: '🔋', name: '마나 배터리', desc: '전투 시작 시 모든 아군 포켓몬이 마나 40을 추가로 얻습니다.' },
+            { id: 'hyper_roll', tier: '골드', icon: '⚡', name: '초고속 모드', desc: '새로고침 비용 1G & 매 라운드 경험치 +2 추가 획득.' }
+        ];
+
+        let state = {
+            stageMajor: 1,
+            stageMinor: 1,
+            phase: 'prep',
+            hp: 100,
+            gold: 14,
+            level: 1,
+            exp: 0,
+            winStreak: 0,
+            loseStreak: 0,
+            shopLocked: false,
+            rerollCost: 2,
+            maxInterestCoins: 5,
+            augments: [],
+
+            shop: [null, null, null, null, null],
+            bench: Array(9).fill(null),
+            allyBoard: Array(21).fill(null),
+            enemyBoard: Array(21).fill(null),
+
+            items: [],
+            selectedItemIndex: null,
+            selectedSlot: null,
+            activeSynergies: {},
+            damageMeter: {},
+            leftTab: 'synergy',
+            battleTimer: null,
+            isCarousel: false,
+            carouselItems: []
+        };
+
+        let uidSeq = 1;
+
+        window.onload = () => {
+            buildBoardsDOM();
+            buildRecipeModal();
+            giveRandomBaseItem();
+            giveRandomBaseItem();
+            prepareRound(true);
+        };
+
+        window.addEventListener('keydown', (e) => {
+            if ((e.key === 'e' || e.key === 'E' || e.key === 'ㄷ') && state.selectedSlot && state.phase === 'prep' && !state.isCarousel) {
+                sellSelectedUnit();
+            }
+        });
+
+        function showToast(msg) {
+            const el = document.getElementById('toast');
+            el.innerText = msg;
+            el.style.opacity = '1';
+            clearTimeout(el._timer);
+            el._timer = setTimeout(() => { el.style.opacity = '0'; }, 2400);
+        }
+
+        function animateFlyingCoins(fromEl, count = 3) {
+            const targetEl = document.getElementById('gold-hud-target');
+            if (!targetEl) return;
+            const targetRect = targetEl.getBoundingClientRect();
+            const startRect = fromEl ? fromEl.getBoundingClientRect() : { left: window.innerWidth / 2, top: window.innerHeight / 2, width: 0, height: 0 };
+            const layer = document.getElementById('fx-layer');
+            for (let i = 0; i < count; i++) {
+                const coin = document.createElement('div');
+                coin.innerText = '🪙';
+                coin.style.cssText = `position:fixed; font-size:22px; left:${startRect.left + startRect.width/2}px; top:${startRect.top + startRect.height/2}px; transition:all ${0.5+i*0.06}s cubic-bezier(0.22,1,0.36,1); z-index:90;`;
+                layer.appendChild(coin);
+                requestAnimationFrame(() => {
+                    coin.style.left = `${targetRect.left + 25}px`;
+                    coin.style.top = `${targetRect.top + 10}px`;
+                    coin.style.transform = 'scale(0.5)';
+                    coin.style.opacity = '0.2';
+                });
+                setTimeout(() => coin.remove(), 700);
+            }
+        }
+
+        function buildBoardsDOM() {
+            const enemyEl = document.getElementById('enemy-board');
+            enemyEl.innerHTML = '';
+            for (let i = 0; i < 21; i++) {
+                const cell = document.createElement('div');
+                cell.className = 'board-cell bg-slate-900/50 border border-slate-800/80 rounded-2xl h-[72px] flex flex-col items-center justify-center relative';
+                cell.id = `enemy-cell-${i}`;
+                enemyEl.appendChild(cell);
+            }
+
+            const allyEl = document.getElementById('ally-board');
+            allyEl.innerHTML = '';
+            for (let i = 0; i < 21; i++) {
+                const row = Math.floor(i / 7);
+                const rowClass = row === 0 ? 'row-front border-rose-900/40' : (row === 1 ? 'row-mid border-slate-800' : 'row-back border-sky-900/40');
+                const cell = document.createElement('div');
+                cell.className = `board-cell ${rowClass} border rounded-2xl h-[75px] flex flex-col items-center justify-center cursor-pointer relative`;
+                cell.id = `ally-cell-${i}`;
+                cell.onclick = () => onCellClick('board', i);
+                cell.oncontextmenu = (e) => { e.preventDefault(); quickSellAt('board', i); };
+                setupDropTarget(cell, 'board', i);
+                allyEl.appendChild(cell);
+            }
+
+            const benchEl = document.getElementById('bench-board');
+            benchEl.innerHTML = '';
+            for (let i = 0; i < 9; i++) {
+                const cell = document.createElement('div');
+                cell.className = 'board-cell bg-slate-950 border border-slate-800 rounded-2xl h-[72px] flex flex-col items-center justify-center cursor-pointer relative';
+                cell.id = `bench-cell-${i}`;
+                cell.onclick = () => onCellClick('bench', i);
+                cell.oncontextmenu = (e) => { e.preventDefault(); quickSellAt('bench', i); };
+                setupDropTarget(cell, 'bench', i);
+                benchEl.appendChild(cell);
+            }
+        }
+
+        function setupDropTarget(cell, loc, idx) {
+            cell.ondragover = (e) => { e.preventDefault(); cell.classList.add('drag-over'); };
+            cell.ondragleave = () => cell.classList.remove('drag-over');
+            cell.ondrop = (e) => {
+                e.preventDefault();
+                cell.classList.remove('drag-over');
+                const dragType = e.dataTransfer.getData('type');
+                if (dragType === 'unit') {
+                    moveOrSwapUnit(e.dataTransfer.getData('loc'), parseInt(e.dataTransfer.getData('idx'), 10), loc, idx);
+                } else if (dragType === 'item') {
+                    equipItemToSlot(parseInt(e.dataTransfer.getData('itemIdx'), 10), loc, idx);
+                }
+            };
+        }
+
+        function prepareRound(isFirst = false) {
+            state.phase = 'prep';
+            state.isCarousel = false;
+            document.getElementById('carousel-arena').classList.add('hidden');
+            document.getElementById('normal-battle-arena').classList.remove('hidden');
+
+            document.getElementById('phase-badge').innerText = '준비 페이즈';
+            document.getElementById('phase-badge').className = 'bg-sky-500/20 text-sky-300 border border-sky-500/30 px-3 py-1 rounded-xl text-sm font-extrabold';
+            const btnBattle = document.getElementById('btn-battle');
+            btnBattle.disabled = false;
+            btnBattle.classList.remove('opacity-40', 'cursor-not-allowed');
+
+            if (!isFirst) {
+                const baseGold = 5;
+                const interest = Math.min(Math.floor(state.gold / 10), state.maxInterestCoins);
+                const streak = Math.max(state.winStreak, state.loseStreak);
+                const streakGold = streak >= 4 ? 3 : (streak >= 3 ? 2 : (streak >= 2 ? 1 : 0));
+                const totalGain = baseGold + interest + streakGold;
+
+                state.gold += totalGain;
+                SoundFX.coin();
+                animateFlyingCoins(document.getElementById('battle-banner'), Math.min(totalGain, 6));
+                grantExp(2, true);
+            }
+
+            if (!state.shopLocked) rerollShop(true);
+
+            if (state.stageMinor === 4) {
+                startCarouselPhase();
+                return;
+            }
+
+            if (state.stageMinor === 1 && state.stageMajor >= 2) {
+                openAugmentModal();
+            }
+
+            spawnEnemyWave();
+            renderAll();
+        }
+
+        function startCarouselPhase() {
+            state.isCarousel = true;
+            document.getElementById('normal-battle-arena').classList.add('hidden');
+            document.getElementById('carousel-arena').classList.remove('hidden');
+            document.getElementById('phase-badge').innerText = '🍣 초밥집 페이즈';
+            document.getElementById('phase-badge').className = 'bg-amber-500/20 text-amber-300 border border-amber-400/40 px-3 py-1 rounded-xl text-sm font-extrabold';
+            const btnBattle = document.getElementById('btn-battle');
+            btnBattle.disabled = true;
+            btnBattle.classList.add('opacity-40', 'cursor-not-allowed');
+
+            const wheel = document.getElementById('carousel-wheel');
+            wheel.innerHTML = '';
+            state.carouselItems = [];
+
+            const count = 6;
+            for (let i = 0; i < count; i++) {
+                const angle = (i / count) * 360;
+                const template = POKEMON_DB[Math.floor(Math.random() * POKEMON_DB.length)];
+                const unit = createUnitInstance(template, 1);
+                state.carouselItems.push(unit);
+
+                const slot = document.createElement('div');
+                slot.className = 'absolute w-16 h-16 bg-slate-900 border-2 border-amber-400 rounded-2xl flex flex-col items-center justify-center cursor-pointer shadow-xl hover:scale-110 transition';
+                const rad = (angle * Math.PI) / 180;
+                slot.style.left = `${Math.cos(rad) * 120 + 138}px`;
+                slot.style.top = `${Math.sin(rad) * 120 + 138}px`;
+                slot.onclick = () => selectCarouselItem(i);
+                slot.innerHTML = `
+                    <img src="${SPRITE_URL(unit.dex)}" class="w-10 h-10 poke-sprite">
+                    <span class="text-[10px] font-black text-amber-300">${unit.name}</span>
+                `;
+                wheel.appendChild(slot);
+            }
+            showToast('🍣 초밥집 회전판에서 원하는 포켓몬을 선택하세요!');
+        }
+
+        function selectCarouselItem(index) {
+            const unit = state.carouselItems[index];
+            if (!unit) return;
+            const emptyIdx = state.bench.findIndex(x => x === null);
+            if (emptyIdx === -1) { showToast('대기 벤치가 가득 찼습니다!'); return; }
+            state.bench[emptyIdx] = unit;
+            SoundFX.starUp();
+            showToast(`🍣 초밥집 [${unit.name}] 획득!`);
+            tryEvolveUnit(unit.id);
+            advanceRound();
+        }
+
+        function openAugmentModal() {
+            const modal = document.getElementById('augment-modal');
+            const container = document.getElementById('augment-choices');
+            container.innerHTML = '';
+
+            const available = AUGMENTS_POOL.filter(a => !state.augments.some(owned => owned.id === a.id));
+            const shuffled = [...available].sort(() => Math.random() - 0.5).slice(0, 3);
+
+            shuffled.forEach(aug => {
+                const card = document.createElement('div');
+                card.className = 'bg-slate-950 hover:bg-slate-800 border-2 border-slate-700 hover:border-amber-400 rounded-3xl p-6 cursor-pointer transition transform hover:-translate-y-1.5 flex flex-col items-center justify-between gap-4 shadow-2xl';
+                card.onclick = () => selectAugment(aug);
+                card.innerHTML = `
+                    <span class="text-xs font-black px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/40">${aug.tier} 증강</span>
+                    <div class="text-5xl my-2">${aug.icon}</div>
+                    <div class="text-lg font-black text-white">${aug.name}</div>
+                    <p class="text-xs text-slate-300 leading-relaxed">${aug.desc}</p>
+                    <span class="mt-3 w-full py-2.5 rounded-2xl bg-amber-500 text-slate-950 font-black text-sm">선택하기</span>
+                `;
+                container.appendChild(card);
+            });
+            modal.classList.remove('hidden');
+        }
+
+        function selectAugment(aug) {
+            state.augments.push(aug);
+            document.getElementById('augment-modal').classList.add('hidden');
+            SoundFX.starUp();
+
+            if (aug.id === 'rich_get_richer') { state.gold += 14; state.maxInterestCoins = 7; }
+            else if (aug.id === 'golden_ticket') { state.rerollCost = 1; }
+            else if (aug.id === 'pandora_items') { state.gold += 8; giveRandomBaseItem(); giveRandomBaseItem(); }
+            else if (aug.id === 'hyper_roll') { state.rerollCost = 1; grantExp(2, true); }
+
+            showToast(`✨ 증강체 [${aug.name}] 활성화 완료!`);
+            renderAll();
+        }
+
+        function toggleShopLock() {
+            state.shopLocked = !state.shopLocked;
+            const btn = document.getElementById('btn-lock-shop');
+            const icon = document.getElementById('lock-icon');
+            const status = document.getElementById('lock-status');
+            if (state.shopLocked) {
+                btn.classList.add('border-amber-400', 'bg-amber-950/40');
+                icon.innerText = '🔒 잠금됨'; status.innerText = '유지중';
+            } else {
+                btn.classList.remove('border-amber-400', 'bg-amber-950/40');
+                icon.innerText = '🔓 상점 잠금'; status.innerText = '해제됨';
+            }
+        }
+
+        function rerollShop(isFree = false) {
+            if (!isFree) {
+                if (state.gold < state.rerollCost) { showToast('코인이 부족합니다!'); return; }
+                state.gold -= state.rerollCost;
+                SoundFX.buy();
+                if (state.shopLocked) toggleShopLock();
+            }
+            const probs = LEVEL_TABLE[state.level].probs;
+            for (let i = 0; i < 5; i++) {
+                const roll = Math.random() * 100;
+                let acc = 0, chosenCost = 1;
+                for (let c = 0; c < 5; c++) {
+                    acc += probs[c];
+                    if (roll <= acc) { chosenCost = c + 1; break; }
+                }
+                const pool = POKEMON_DB.filter(p => p.cost === chosenCost);
+                const pick = pool[Math.floor(Math.random() * pool.length)] || POKEMON_DB[0];
+                state.shop[i] = { ...pick };
+            }
+            renderAll();
+        }
+
+        function buyExp() {
+            if (state.level >= 8) { showToast('이미 최고 레벨(Lv.8)입니다!'); return; }
+            if (state.gold < 4) { showToast('경험치 구매에 4G가 필요합니다!'); return; }
+            state.gold -= 4;
+            SoundFX.buy();
+            grantExp(4, false);
+            renderAll();
+        }
+
+        function grantExp(amount, silent) {
+            if (state.level >= 8) return;
+            state.exp += amount;
+            while (state.level < 8 && state.exp >= LEVEL_TABLE[state.level].expNeeded) {
+                state.exp -= LEVEL_TABLE[state.level].expNeeded;
+                state.level++;
+                SoundFX.starUp();
+                showToast(`🎉 레벨 업! Lv.${state.level} 달성!`);
+            }
+        }
+
+        function buyFromShop(shopIdx) {
+            const template = state.shop[shopIdx];
+            if (!template) return;
+            if (state.gold < template.cost) { showToast('코인이 부족합니다!'); return; }
+            const emptyBench = state.bench.findIndex(x => x === null);
+            if (emptyBench === -1) { showToast('대기 벤치가 가득 찼습니다!'); return; }
+
+            state.gold -= template.cost;
+            state.shop[shopIdx] = null;
+            SoundFX.buy();
+
+            const newUnit = createUnitInstance(template, 1);
+            state.bench[emptyBench] = newUnit;
+            state.selectedSlot = { loc: 'bench', idx: emptyBench };
+            tryEvolveUnit(template.id);
+            renderAll();
+        }
+
+        function createUnitInstance(template, star) {
+            const mult = star === 1 ? 1 : (star === 2 ? 1.8 : 3.2);
+            return {
+                ...template,
+                uid: 'u_' + (uidSeq++),
+                star,
+                maxHp: Math.round(template.hp * mult),
+                hp: Math.round(template.hp * mult),
+                atk: Math.round(template.atk * mult),
+                skillDmg: Math.round(template.skillDmg * mult),
+                items: []
+            };
+        }
+
+        function tryEvolveUnit(pokeId) {
+            for (let targetStar = 1; targetStar <= 2; targetStar++) {
+                const matches = [];
+                state.allyBoard.forEach((u, idx) => { if (u && u.id === pokeId && u.star === targetStar) matches.push({ loc: 'board', idx, unit: u }); });
+                state.bench.forEach((u, idx) => { if (u && u.id === pokeId && u.star === targetStar) matches.push({ loc: 'bench', idx, unit: u }); });
+
+                if (matches.length >= 3) {
+                    const three = matches.slice(0, 3);
+                    const inheritedItems = [];
+                    three.forEach(m => {
+                        m.unit.items.forEach(it => { if (inheritedItems.length < 3) inheritedItems.push(it); });
+                        if (m.loc === 'board') state.allyBoard[m.idx] = null;
+                        else state.bench[m.idx] = null;
+                    });
+
+                    const template = POKEMON_DB.find(p => p.id === pokeId);
+                    const upgraded = createUnitInstance(template, targetStar + 1);
+                    upgraded.items = inheritedItems;
+
+                    const first = three[0];
+                    if (first.loc === 'board') state.allyBoard[first.idx] = upgraded;
+                    else state.bench[first.idx] = upgraded;
+
+                    state.selectedSlot = { loc: first.loc, idx: first.idx };
+                    SoundFX.starUp();
+                    showToast(`🌟 진화 성공! ${template.name} ${targetStar + 1}성!`);
+                }
+            }
+        }
+
+        function onCellClick(loc, idx) {
+            if (state.isCarousel) return;
+            const clickedUnit = loc === 'board' ? state.allyBoard[idx] : state.bench[idx];
+
+            if (state.selectedItemIndex !== null) {
+                if (clickedUnit) equipItemToSlot(state.selectedItemIndex, loc, idx);
+                else { state.selectedItemIndex = null; renderAll(); }
+                return;
+            }
+
+            if (!state.selectedSlot) {
+                if (clickedUnit) { state.selectedSlot = { loc, idx }; renderAll(); }
+                return;
+            }
+
+            if (state.selectedSlot.loc === loc && state.selectedSlot.idx === idx) {
+                state.selectedSlot = null; renderAll(); return;
+            }
+
+            moveOrSwapUnit(state.selectedSlot.loc, state.selectedSlot.idx, loc, idx);
+        }
+
+        function moveOrSwapUnit(fromLoc, fromIdx, toLoc, toIdx) {
+            const srcUnit = fromLoc === 'board' ? state.allyBoard[fromIdx] : state.bench[fromIdx];
+            const dstUnit = toLoc === 'board' ? state.allyBoard[toIdx] : state.bench[toIdx];
+            if (!srcUnit) return;
+
+            if (fromLoc === 'bench' && toLoc === 'board' && !dstUnit) {
+                const currentCount = state.allyBoard.filter(Boolean).length;
+                const maxUnits = LEVEL_TABLE[state.level].maxUnits;
+                if (currentCount >= maxUnits) {
+                    showToast(`배치 한도(${maxUnits}마리) 초과!`);
+                    state.selectedSlot = null; renderAll(); return;
+                }
+            }
+
+            if (fromLoc === 'board') state.allyBoard[fromIdx] = dstUnit;
+            else state.bench[fromIdx] = dstUnit;
+
+            if (toLoc === 'board') state.allyBoard[toIdx] = srcUnit;
+            else state.bench[toIdx] = srcUnit;
+
+            state.selectedSlot = { loc: toLoc, idx: toIdx };
+            SoundFX.buy();
+            renderAll();
+        }
+
+        function quickSellAt(loc, idx) {
+            state.selectedSlot = { loc, idx };
+            sellSelectedUnit();
+        }
+
+        function sellSelectedUnit() {
+            if (!state.selectedSlot || state.isCarousel) return;
+            const { loc, idx } = state.selectedSlot;
+            const unit = loc === 'board' ? state.allyBoard[idx] : state.bench[idx];
+            if (!unit) return;
+
+            const refund = unit.cost * (unit.star === 1 ? 1 : (unit.star === 2 ? 3 : 9));
+            state.gold += refund;
+            unit.items.forEach(it => { if (state.items.length < 10) state.items.push(it); });
+
+            if (loc === 'board') state.allyBoard[idx] = null;
+            else state.bench[idx] = null;
+
+            SoundFX.coin();
+            state.selectedSlot = null;
+            showToast(`🪙 ${unit.name} 판매 (+${refund}G)`);
+            renderAll();
+        }
+
+        function unequipItems() {
+            if (!state.selectedSlot) return;
+            const { loc, idx } = state.selectedSlot;
+            const unit = loc === 'board' ? state.allyBoard[idx] : state.bench[idx];
+            if (!unit || unit.items.length === 0) return;
+
+            unit.items.forEach(it => {
+                if (state.items.length < 10) state.items.push(it);
+                else showToast('창고가 가득 차서 아이템이 소실되었습니다!');
+            });
+            unit.items = [];
+            SoundFX.buy();
+            showToast('🎒 아이템이 창고로 회수되었습니다.');
+            renderAll();
+        }
+
+        function giveRandomBaseItem() {
+            if (state.items.length >= 10) return;
+            const keys = Object.keys(BASE_ITEMS);
+            const pickKey = keys[Math.floor(Math.random() * keys.length)];
+            state.items.push({ ...BASE_ITEMS[pickKey], isCombined: false });
+        }
+
+        function selectInventoryItem(itemIdx) {
+            state.selectedItemIndex = state.selectedItemIndex === itemIdx ? null : itemIdx;
+            renderAll();
+        }
+
+        function equipItemToSlot(itemIdx, loc, idx) {
+            const unit = loc === 'board' ? state.allyBoard[idx] : state.bench[idx];
+            const item = state.items[itemIdx];
+            if (!unit || !item) return;
+
+            if (!item.isCombined) {
+                const existingBaseIdx = unit.items.findIndex(i => !i.isCombined);
+                if (existingBaseIdx !== -1) {
+                    const combined = getCombinedItem(unit.items[existingBaseIdx].id, item.id);
+                    if (combined) {
+                        unit.items.splice(existingBaseIdx, 1);
+                        unit.items.push({ ...combined, isCombined: true });
+                        state.items.splice(itemIdx, 1);
+                        state.selectedItemIndex = null;
+                        SoundFX.starUp();
+                        showToast(`⚒️ 완성 아이템 [${combined.name}] 제작 완료!`);
+                        renderAll(); return;
+                    }
+                }
+            }
+
+            if (unit.items.length >= 3) { showToast('포켓몬당 최대 3개의 아이템!'); state.selectedItemIndex = null; renderAll(); return; }
+            unit.items.push(item);
+            state.items.splice(itemIdx, 1);
+            state.selectedItemIndex = null;
+            SoundFX.buy();
+            renderAll();
+        }
+
+        function computeSynergies() {
+            const units = state.allyBoard.filter(Boolean);
+            const uniqueTypes = {};
+            const seen = new Set();
+            units.forEach(u => {
+                if (!seen.has(u.id)) {
+                    seen.add(u.id);
+                    u.types.forEach(t => { uniqueTypes[t] = (uniqueTypes[t] || 0) + 1; });
+                }
+            });
+
+            const result = {};
+            Object.entries(SYNERGY_DATA).forEach(([type, data]) => {
+                const count = uniqueTypes[type] || 0;
+                if (count > 0) {
+                    let activeTier = -1;
+                    data.tiers.forEach((req, idx) => { if (count >= req) activeTier = idx; });
+                    result[type] = {
+                        count, tiers: data.tiers, activeTier,
+                        bonus: activeTier >= 0 ? data.bonus[activeTier] : 0,
+                        icon: data.icon, desc: data.desc
+                    };
+                }
+            });
+            state.activeSynergies = result;
+        }
+
+        function spawnEnemyWave() {
+            state.enemyBoard.fill(null);
+            const major = state.stageMajor;
+            const minor = state.stageMinor;
+
+            const isEarlyGame = (major === 1 && minor <= 3);
+            const count = isEarlyGame ? Math.min(3, 1 + minor) : Math.min(2 + major, 6);
+            const maxCost = isEarlyGame ? 1 : Math.min(major + 1, 5);
+            const pool = POKEMON_DB.filter(p => p.cost <= maxCost);
+
+            for (let i = 0; i < count; i++) {
+                const template = pool[Math.floor(Math.random() * pool.length)];
+                const star = isEarlyGame ? 1 : (major >= 4 ? (Math.random() > 0.5 ? 2 : 1) : 1);
+                const enemy = createUnitInstance(template, star);
+                
+                const scale = isEarlyGame ? (0.45 + minor * 0.1) : (0.75 + (major - 1) * 0.28 + minor * 0.07);
+                enemy.maxHp = Math.round(enemy.maxHp * scale * (isEarlyGame ? 0.6 : 0.85));
+                enemy.hp = enemy.maxHp;
+                enemy.atk = Math.round(enemy.atk * scale * (isEarlyGame ? 0.65 : 0.80));
+
+                const slot = 14 + (i % 7);
+                state.enemyBoard[slot] = enemy;
+            }
+            document.getElementById('enemy-wave-label').innerText = isEarlyGame ? `미니언 웨이브 ${stageLabel(major, minor)} (부드러운 초반)` : `도전자 웨이브 ${stageLabel(major, minor)}`;
+        }
+
+        function stageLabel(maj, min) {
+            return `${maj}-${min}`;
+        }
+
+        function startBattle() {
+            const allies = state.allyBoard.filter(Boolean);
+            if (allies.length === 0) { showToast('전장에 포켓몬을 배치해주세요!'); return; }
+
+            state.phase = 'battle';
+            state.selectedSlot = null;
+            state.selectedItemIndex = null;
+            document.getElementById('phase-badge').innerText = '전투 진행중!';
+            document.getElementById('phase-badge').className = 'bg-rose-500/20 text-rose-300 border border-rose-500/40 px-3 py-1 rounded-xl text-sm font-extrabold animate-pulse';
+            document.getElementById('btn-battle').disabled = true;
+
+            state.damageMeter = {};
+            switchLeftTab('damage');
+
+            const combatants = [];
+            const hasCombatTrain = state.augments.some(a => a.id === 'combat_training');
+            const hasCyberBulk = state.augments.some(a => a.id === 'cybernetic_bulk');
+            const hasManaBat = state.augments.some(a => a.id === 'mana_battery');
+
+            state.enemyBoard.forEach((u, idx) => {
+                if (!u) return;
+                combatants.push({ ...u, team: 'enemy', row: Math.floor(idx/7), col: idx%7, curHp: u.maxHp, shield: 0, mana: 0, maxMana: 100 });
+            });
+
+            state.allyBoard.forEach((u, idx) => {
+                if (!u) return;
+                let maxHp = u.maxHp, atk = u.atk, armor = u.armor, range = u.range;
+                let apMult = 1.0, startMana = hasManaBat ? 40 : 0, shield = 0, regen = 0, reflect = 0, manaOnHit = 20, omnivamp = 0;
+
+                if (u.types.includes('불꽃') && state.activeSynergies['불꽃']?.bonus) atk *= (1 + state.activeSynergies['불꽃'].bonus);
+                if (u.types.includes('물') && state.activeSynergies['물']?.bonus) maxHp *= (1 + state.activeSynergies['물'].bonus);
+                if (state.activeSynergies['노말']?.bonus) { atk *= (1 + state.activeSynergies['노말'].bonus); maxHp *= (1 + state.activeSynergies['노말'].bonus); }
+                if (u.types.includes('전기') && state.activeSynergies['전기']?.bonus) manaOnHit *= 2;
+                if (u.types.includes('비행') && state.activeSynergies['비행']?.bonus) range += 1;
+                if (u.types.includes('고스트') && state.activeSynergies['고스트']?.bonus) apMult += 0.35;
+                if (u.types.includes('에스퍼') && state.activeSynergies['에스퍼']?.bonus) startMana += 60;
+                if (u.types.includes('드래곤') && state.activeSynergies['드래곤']?.bonus) { maxHp += 500; atk *= 1.4; }
+                if (state.activeSynergies['바위']?.activeTier >= 0) { armor += 35; shield += 150; }
+
+                if (hasCombatTrain) atk *= 1.25;
+                if (hasCyberBulk) maxHp += 320;
+
+                u.items.forEach(it => {
+                    if (it.atk) atk += it.atk;
+                    if (it.hp) maxHp += it.hp;
+                    if (it.armor) armor += it.armor;
+                    if (it.apPct) apMult += it.apPct;
+                    if (it.startMana) startMana += it.startMana;
+                    if (it.shield) shield += it.shield;
+                    if (it.regen) regen += it.regen;
+                    if (it.reflect) reflect += it.reflect;
+                    if (it.manaOnHit) manaOnHit += it.manaOnHit;
+                    if (it.omnivamp) omnivamp += it.omnivamp;
+                });
+
+                state.damageMeter[u.uid] = { name: u.name, dex: u.dex, star: u.star, dmg: 0 };
+                combatants.push({
+                    ...u, team: 'ally', row: Math.floor(idx/7)+3, col: idx%7,
+                    maxHp: Math.round(maxHp), curHp: Math.round(maxHp), atk: Math.round(atk),
+                    armor, range, apMult, shield, regen, reflect, manaOnHit, omnivamp,
+                    mana: Math.min(100, startMana), maxMana: 100
+                });
+            });
+
+            renderCombatBoard(combatants);
+            state.battleTimer = setInterval(() => stepCombatTick(combatants), 580);
+        }
+
+        function stepCombatTick(combatants) {
+            const allies = combatants.filter(c => c.team === 'ally' && c.curHp > 0);
+            const enemies = combatants.filter(c => c.team === 'enemy' && c.curHp > 0);
+
+            if (enemies.length === 0) { finishBattle(true, combatants); return; }
+            if (allies.length === 0) { finishBattle(false, combatants); return; }
+
+            const order = [...allies, ...enemies].sort(() => Math.random() - 0.5);
+
+            for (const unit of order) {
+                if (unit.curHp <= 0) continue;
+                const foes = combatants.filter(c => c.team !== unit.team && c.curHp > 0);
+                if (foes.length === 0) break;
+
+                if (unit.regen > 0) unit.curHp = Math.min(unit.maxHp, unit.curHp + unit.regen);
+
+                foes.sort((a, b) => gridDist(unit, a) - gridDist(unit, b));
+                const target = foes[0];
+
+                if (gridDist(unit, target) > unit.range) {
+                    moveOneStepTowards(unit, target, combatants);
+                } else {
+                    const isUlt = unit.mana >= 100;
+                    let rawDmg = isUlt ? Math.round(unit.skillDmg * (unit.apMult || 1)) : unit.atk;
+                    const mitigation = 100 / (100 + (target.armor || 20));
+                    let finalDmg = Math.max(15, Math.round(rawDmg * mitigation));
+
+                    const isCrit = !isUlt && Math.random() < 0.25;
+                    if (isCrit) finalDmg = Math.round(finalDmg * 1.5);
+
+                    if (unit.team === 'ally' && unit.types.includes('독') && state.activeSynergies['독']?.bonus) {
+                        finalDmg += Math.round(target.maxHp * 0.05);
+                    }
+
+                    if (isUlt) {
+                        unit.mana = 0;
+                        SoundFX.skill();
+                        triggerSkillEffect(unit, target);
+                    } else {
+                        unit.mana = Math.min(100, unit.mana + (unit.manaOnHit || 20));
+                        SoundFX.hit();
+                        triggerAttackEffect(unit, target);
+                    }
+
+                    if (unit.team === 'ally' && state.activeSynergies['풀']?.bonus) {
+                        unit.curHp = Math.min(unit.maxHp, unit.curHp + 28);
+                    }
+                    if (unit.omnivamp > 0) {
+                        unit.curHp = Math.min(unit.maxHp, unit.curHp + Math.round(finalDmg * unit.omnivamp));
+                    }
+
+                    applyDamage(unit, target, finalDmg, isCrit);
+                }
+            }
+
+            renderCombatBoard(combatants);
+            renderDamageMeter();
+        }
+
+        // 데미지 팝업 숫자 플로팅 효과 함수
+        function showFloatingNumber(target, dmg, isCrit) {
+            const layer = document.getElementById('fx-layer');
+            if (!layer) return;
+            const el = document.createElement('div');
+            el.innerText = `${isCrit ? '💥CRIT! ' : ''}-${dmg}`;
+            el.style.cssText = `position:fixed; font-size:${isCrit ? '18px' : '14px'}; font-weight:900; color:${isCrit ? '#facc15' : '#f87171'}; z-index:95; pointer-events:none; transition:all 0.5s ease-out; left:${window.innerWidth/2 + (Math.random()*60 - 30)}px; top:${window.innerHeight/2 + (Math.random()*60 - 30)}px; text-shadow:0 2px 4px rgba(0,0,0,0.8);`;
+            layer.appendChild(el);
+            requestAnimationFrame(() => {
+                el.style.transform = 'translateY(-35px) scale(1.2)';
+                el.style.opacity = '0';
+            });
+            setTimeout(() => el.remove(), 500);
+        }
+
+        function triggerAttackEffect(attacker, target) {
+            const layer = document.getElementById('fx-layer');
+            if (!layer) return;
+            const fx = document.createElement('div');
+            fx.innerText = '✨';
+            fx.style.cssText = `position:fixed; font-size:18px; z-index:85; pointer-events:none; transition:all 0.35s ease-out; left:${window.innerWidth/2 + (Math.random()*80 - 40)}px; top:${window.innerHeight/2 + (Math.random()*80 - 40)}px;`;
+            layer.appendChild(fx);
+            requestAnimationFrame(() => {
+                fx.style.transform = 'scale(1.4) translateY(-20px)';
+                fx.style.opacity = '0';
+            });
+            setTimeout(() => fx.remove(), 350);
+        }
+
+        function triggerSkillEffect(attacker, target) {
+            const layer = document.getElementById('fx-layer');
+            if (!layer) return;
+            const fx = document.createElement('div');
+            fx.innerText = attacker.types.includes('불꽃') ? '🔥 💥' : (attacker.types.includes('전기') ? '⚡ ⚡' : (attacker.types.includes('물') ? '💧 🌊' : '✨ 🔮'));
+            fx.style.cssText = `position:fixed; font-size:32px; z-index:90; pointer-events:none; transition:all 0.6s ease-out; left:${window.innerWidth/2 + (Math.random()*100 - 50)}px; top:${window.innerHeight/2 + (Math.random()*100 - 50)}px;`;
+            layer.appendChild(fx);
+            requestAnimationFrame(() => {
+                fx.style.transform = 'scale(2.2) translateY(-40px)';
+                fx.style.opacity = '0';
+            });
+            setTimeout(() => fx.remove(), 600);
+        }
+
+        function applyDamage(attacker, target, dmg, isCrit) {
+            let remaining = dmg;
+            if (target.shield > 0) {
+                const absorbed = Math.min(target.shield, remaining);
+                target.shield -= absorbed;
+                remaining -= absorbed;
+            }
+            target.curHp = Math.max(0, target.curHp - remaining);
+            target.mana = Math.min(100, target.mana + 12);
+
+            showFloatingNumber(target, dmg, isCrit);
+
+            if (target.reflect > 0 && attacker.curHp > 0) {
+                attacker.curHp = Math.max(0, attacker.curHp - target.reflect);
+            }
+
+            if (attacker.team === 'ally' && state.damageMeter[attacker.uid]) {
+                state.damageMeter[attacker.uid].dmg += dmg;
+            }
+        }
+
+        function gridDist(a, b) { return Math.max(Math.abs(a.row - b.row), Math.abs(a.col - b.col)); }
+
+        function moveOneStepTowards(unit, target, combatants) {
+            const dr = Math.sign(target.row - unit.row);
+            const dc = Math.sign(target.col - unit.col);
+            const candidates = [{ r: unit.row + dr, c: unit.col + dc }, { r: unit.row + dr, c: unit.col }, { r: unit.row, c: unit.col + dc }];
+            for (const pos of candidates) {
+                if (pos.r >= 0 && pos.r < 6 && pos.c >= 0 && pos.c < 7) {
+                    if (!combatants.some(c => c.curHp > 0 && c.row === pos.r && c.col === pos.c)) {
+                        unit.row = pos.r; unit.col = pos.c; return;
+                    }
+                }
+            }
+        }
+
+        function finishBattle(isWin, combatants) {
+            clearInterval(state.battleTimer);
+            const banner = document.getElementById('round-summary-banner');
+            const title = document.getElementById('summary-title');
+            const breakdown = document.getElementById('summary-breakdown');
+
+            if (isWin) {
+                state.winStreak++; state.loseStreak = 0;
+                state.gold += 3;
+                SoundFX.win();
+                animateFlyingCoins(banner, 5);
+
+                if (Math.random() < 0.65 && state.items.length < 10) {
+                    giveRandomBaseItem();
+                    showToast('🎁 전투 승리 보상으로 기본 아이템 획득!');
+                }
+
+                title.innerText = `🏆 스테이지 ${state.stageMajor}-${state.stageMinor} 승리!`;
+                breakdown.innerHTML = `승리 보너스 <span class="text-amber-400 font-black">+3G</span> 획득! (${state.winStreak}연승)`;
+            } else {
+                state.loseStreak++; state.winStreak = 0;
+                const surviving = combatants.filter(c => c.team === 'enemy' && c.curHp > 0).length;
+                const hpLoss = 8 + surviving * 3;
+                state.hp = Math.max(0, state.hp - hpLoss);
+
+                title.innerText = `💥 스테이지 패배 (-${hpLoss} HP)`;
+                breakdown.innerHTML = `전설이 체력 <span class="text-rose-400 font-black">-${hpLoss} HP</span> 감소`;
+            }
+
+            updateTopHUD();
+            banner.classList.remove('hidden');
+
+            setTimeout(() => {
+                banner.classList.add('hidden');
+                if (state.hp <= 0) { openGameOverModal(false); return; }
+                advanceRound();
+            }, 2400);
+        }
+
+        function advanceRound() {
+            state.stageMinor++;
+            if (state.stageMinor > 4) {
+                state.stageMinor = 1;
+                state.stageMajor++;
+                if (state.stageMajor > 5) {
+                    openGameOverModal(true);
+                    return;
+                }
+            }
+            prepareRound(false);
+        }
+
+        function openGameOverModal(victory) {
+            const modal = document.getElementById('gameover-modal');
+            document.getElementById('gameover-emoji').innerText = victory ? '👑' : '💀';
+            document.getElementById('gameover-title').innerText = victory ? '완벽한 최종 우승!' : '체력 소진 (패배)';
+            document.getElementById('gameover-desc').innerText = victory ? '모든 스테이지를 돌파하고 최고의 포켓몬 오토체스 마스터가 되셨습니다!' : '아쉽게 패배했습니다. 더 강력한 포켓몬 조합과 아이템으로 다시 도전해보세요!';
+            modal.classList.remove('hidden');
+        }
+
+        function renderAll() {
+            computeSynergies();
+            updateTopHUD();
+            renderSynergyPanel();
+            renderDamageMeter();
+            renderItemInventory();
+            renderPrepBoards();
+            renderShopSlots();
+            renderUnitInspector();
+        }
+
+        function updateTopHUD() {
+            document.getElementById('stage-badge').innerText = `라운드 ${state.stageMajor}-${state.stageMinor}`;
+            document.getElementById('hud-hp').innerText = `${state.hp} HP`;
+            document.getElementById('hud-gold').innerText = `${state.gold} G`;
+
+            const earnedInterest = Math.min(Math.floor(state.gold / 10), state.maxInterestCoins);
+            document.getElementById('hud-interest-text').innerText = `+${earnedInterest}G`;
+            const coinsBox = document.getElementById('interest-coins-container');
+            coinsBox.innerHTML = '';
+            for (let i = 0; i < state.maxInterestCoins; i++) {
+                const active = i < earnedInterest;
+                const slot = document.createElement('div');
+                slot.className = `w-5 h-5 rounded-full flex items-center justify-center text-xs border ${active ? 'bg-amber-400 border-amber-200 text-slate-950 font-black interest-coin-active' : 'bg-slate-900 border-slate-700 text-slate-600'}`;
+                slot.innerText = active ? '₩' : '•';
+                coinsBox.appendChild(slot);
+            }
+
+            const streakEl = document.getElementById('hud-streak');
+            const streakIcon = document.getElementById('streak-icon');
+            if (state.winStreak > 0) {
+                streakIcon.innerText = '🔥';
+                streakEl.innerText = `${state.winStreak}연승`;
+                streakEl.className = 'text-sm font-extrabold text-amber-400';
+            } else if (state.loseStreak > 0) {
+                streakIcon.innerText = '💧';
+                streakEl.innerText = `${state.loseStreak}연패`;
+                streakEl.className = 'text-sm font-extrabold text-sky-400';
+            } else {
+                streakIcon.innerText = '⚖️';
+                streakEl.innerText = '0연승';
+                streakEl.className = 'text-sm font-extrabold text-slate-400';
+            }
+
+            const lvInfo = LEVEL_TABLE[state.level];
+            document.getElementById('hud-level').innerText = `Lv.${state.level}`;
+            document.getElementById('hud-exp').innerText = state.level >= 8 ? 'MAX' : state.exp;
+            document.getElementById('hud-max-exp').innerText = state.level >= 8 ? 'MAX' : lvInfo.expNeeded;
+            document.getElementById('hud-exp-bar').style.width = `${state.level >= 8 ? 100 : (state.exp / lvInfo.expNeeded) * 100}%`;
+
+            for (let c = 1; c <= 5; c++) {
+                document.getElementById(`prob-${c}`).innerText = `${lvInfo.probs[c - 1]}%`;
+            }
+            document.getElementById('reroll-cost-label').innerText = `${state.rerollCost} G`;
+
+            const augBar = document.getElementById('active-augments-bar');
+            if (state.augments.length > 0) {
+                augBar.classList.remove('hidden');
+                augBar.innerHTML = state.augments.map(a => `<span class="bg-amber-500/20 border border-amber-400/50 text-amber-300 px-3 py-1.5 rounded-xl text-xs font-bold">${a.icon} ${a.name}</span>`).join('');
+            }
+
+            document.getElementById('board-unit-count').innerText = state.allyBoard.filter(Boolean).length;
+            document.getElementById('board-unit-max').innerText = lvInfo.maxUnits;
+            document.getElementById('bench-count').innerText = state.bench.filter(Boolean).length;
+        }
+
+        function switchLeftTab(tab) {
+            state.leftTab = tab;
+            const btnSyn = document.getElementById('tab-synergy'), btnDmg = document.getElementById('tab-damage');
+            const panSyn = document.getElementById('panel-synergy'), panDmg = document.getElementById('panel-damage');
+            if (tab === 'synergy') {
+                btnSyn.className = 'flex-1 py-2 rounded-xl text-sm font-extrabold bg-slate-800 text-amber-400 shadow transition';
+                btnDmg.className = 'flex-1 py-2 rounded-xl text-sm font-extrabold text-slate-400 hover:text-slate-200 transition';
+                panSyn.classList.remove('hidden'); panDmg.classList.add('hidden');
+            } else {
+                btnDmg.className = 'flex-1 py-2 rounded-xl text-sm font-extrabold bg-slate-800 text-rose-400 shadow transition';
+                btnSyn.className = 'flex-1 py-2 rounded-xl text-sm font-extrabold text-slate-400 hover:text-slate-200 transition';
+                panDmg.classList.remove('hidden'); panSyn.classList.add('hidden');
+            }
+        }
+
+        function renderSynergyPanel() {
+            const panel = document.getElementById('panel-synergy');
+            const entries = Object.entries(state.activeSynergies).sort((a,b)=>(b[1].activeTier-a[1].activeTier)||(b[1].count-a[1].count));
+            if (entries.length === 0) {
+                panel.innerHTML = `<div class="text-sm text-slate-500 italic text-center py-8">필드에 포켓몬을 배치하세요.</div>`;
+                return;
+            }
+            panel.innerHTML = entries.map(([type, s]) => {
+                const isActive = s.activeTier >= 0;
+                return `
+                    <div class="p-3 rounded-2xl border ${isActive ? 'bg-slate-800/95 border-amber-500/60 shadow-lg' : 'bg-slate-950/60 border-slate-800 opacity-70'}">
+                        <div class="flex justify-between items-center">
+                            <span class="text-sm font-extrabold ${isActive ? 'text-amber-300' : 'text-slate-300'}">${s.icon} ${type} (${s.count})</span>
+                            <span class="text-xs bg-slate-950 px-2.5 py-0.5 rounded border border-slate-800">${s.tiers.map(t=>`<span class="${s.count>=t?'text-amber-300 font-black':''}">${t}</span>`).join('/')}</span>
+                        </div>
+                        <div class="text-xs text-slate-300 mt-1.5">${s.desc}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderDamageMeter() {
+            const panel = document.getElementById('panel-damage');
+            const list = Object.values(state.damageMeter).sort((a,b)=>b.dmg - a.dmg);
+            if (list.length === 0) { panel.innerHTML = `<div class="text-sm text-slate-500 italic text-center py-8">전투 시작 후 집계됩니다.</div>`; return; }
+            const topDmg = Math.max(1, list[0].dmg);
+            panel.innerHTML = list.map(entry => `
+                <div class="bg-slate-950/85 border border-slate-800 p-2.5 rounded-2xl">
+                    <div class="flex justify-between items-center text-xs font-bold mb-1">
+                        <span class="flex items-center gap-2"><img src="${SPRITE_URL(entry.dex)}" class="w-6 h-6 poke-sprite"><span>${entry.name}</span></span>
+                        <span class="text-rose-400 font-black">${entry.dmg.toLocaleString()}</span>
+                    </div>
+                    <div class="w-full bg-slate-900 h-2 rounded-full overflow-hidden">
+                        <div class="bg-gradient-to-r from-amber-500 to-rose-500 h-full" style="width: ${Math.round((entry.dmg/topDmg)*100)}%"></div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderItemInventory() {
+            document.getElementById('item-count').innerText = state.items.length;
+            const inv = document.getElementById('item-inventory');
+            inv.innerHTML = '';
+            for (let i = 0; i < 10; i++) {
+                const item = state.items[i];
+                const slot = document.createElement('div');
+                if (item) {
+                    const isSel = state.selectedItemIndex === i;
+                    slot.className = `h-12 rounded-xl border flex items-center justify-center text-xl cursor-pointer transition ${isSel?'bg-cyan-900/70 border-cyan-400 ring-2 ring-cyan-400 scale-105':'bg-slate-900 border-slate-700 hover:border-slate-500'}`;
+                    slot.innerText = item.icon;
+                    slot.onclick = () => selectInventoryItem(i);
+                } else {
+                    slot.className = 'h-12 rounded-xl border border-slate-900 bg-slate-950/50';
+                }
+                inv.appendChild(slot);
+            }
+        }
+
+        function renderPrepBoards() {
+            for (let i = 0; i < 21; i++) {
+                document.getElementById(`enemy-cell-${i}`).innerHTML = state.enemyBoard[i] ? renderUnitTileHTML(state.enemyBoard[i], true) : '';
+            }
+            for (let i = 0; i < 21; i++) {
+                const cell = document.getElementById(`ally-cell-${i}`);
+                const row = Math.floor(i / 7);
+                const isSel = state.selectedSlot && state.selectedSlot.loc === 'board' && state.selectedSlot.idx === i;
+                cell.className = `board-cell ${row===0?'row-front border-rose-900/40':(row===1?'row-mid border-slate-800':'row-back border-sky-900/40')} border rounded-2xl h-[75px] flex flex-col items-center justify-center cursor-pointer relative ${isSel?'ring-2 ring-cyan-400 border-cyan-400 bg-cyan-950/40':''}`;
+                cell.innerHTML = state.allyBoard[i] ? renderUnitTileHTML(state.allyBoard[i], false, 'board', i) : `<span class="text-[10px] text-slate-500 font-bold">${row===0?'🛡️ 앞열':(row===2?'🎯 뒷열':'')}</span>`;
+            }
+            for (let i = 0; i < 9; i++) {
+                const cell = document.getElementById(`bench-cell-${i}`);
+                const isSel = state.selectedSlot && state.selectedSlot.loc === 'bench' && state.selectedSlot.idx === i;
+                cell.className = `board-cell bg-slate-950 border rounded-2xl h-[72px] flex flex-col items-center justify-center cursor-pointer relative ${isSel?'ring-2 ring-cyan-400 border-cyan-400 bg-cyan-950/40':'border-slate-800'}`;
+                cell.innerHTML = state.bench[i] ? renderUnitTileHTML(state.bench[i], false, 'bench', i) : `<span class="text-xs text-slate-800 font-bold">${i+1}</span>`;
+            }
+        }
+
+        function renderUnitTileHTML(u, isEnemy, loc='', idx=0) {
+            const itemsHTML = u.items && u.items.length > 0 ? `<div class="absolute bottom-1 left-1.5 flex gap-0.5 text-[10px]">${u.items.map(it=>it.icon).join('')}</div>` : '';
+            const dragAttr = !isEnemy ? `draggable="true" ondragstart="onUnitDragStart(event, '${loc}', ${idx})"` : '';
+            return `
+                <div ${dragAttr} class="w-full h-full flex flex-col items-center justify-center relative">
+                    <span class="absolute top-0.5 right-1.5 text-xs font-black ${u.star===3?'text-amber-300':(u.star===2?'text-sky-300':'text-slate-300')}">${'★'.repeat(u.star)}</span>
+                    <img src="${SPRITE_URL(u.dex)}" class="w-11 h-11 poke-sprite pointer-events-none">
+                    <span class="text-[11px] font-extrabold text-slate-100 truncate max-w-[92%] leading-none">${u.name}</span>
+                    ${itemsHTML}
+                </div>
+            `;
+        }
+
+        function onUnitDragStart(e, loc, idx) {
+            e.dataTransfer.setData('type', 'unit');
+            e.dataTransfer.setData('loc', loc);
+            e.dataTransfer.setData('idx', idx);
+        }
+
+        function renderCombatBoard(combatants) {
+            for (let i = 0; i < 21; i++) {
+                document.getElementById(`enemy-cell-${i}`).innerHTML = '';
+                document.getElementById(`ally-cell-${i}`).innerHTML = '';
+            }
+            combatants.forEach(u => {
+                if (u.curHp <= 0) return;
+                const cell = (u.row < 3) ? document.getElementById(`enemy-cell-${u.row*7 + u.col}`) : document.getElementById(`ally-cell-${(u.row-3)*7 + u.col}`);
+                if (!cell) return;
+                const hpPct = Math.max(0, Math.min(100, (u.curHp / u.maxHp) * 100));
+                cell.innerHTML = `
+                    <div class="w-full h-full flex flex-col items-center justify-center relative">
+                        <span class="absolute top-0.5 right-1.5 text-[10px] font-black text-amber-300">${'★'.repeat(u.star)}</span>
+                        <img src="${SPRITE_URL(u.dex)}" class="w-10 h-10 poke-sprite">
+                        <div class="w-14 flex flex-col gap-0.5 mt-0.5">
+                            <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                                <div class="${u.team==='ally'?'bg-emerald-400':'bg-rose-500'} h-full" style="width: ${hpPct}%"></div>
+                            </div>
+                            <div class="w-full bg-slate-800 h-1 rounded-full overflow-hidden">
+                                <div class="bg-sky-400 h-full" style="width: ${Math.min(100, (u.mana/u.maxMana)*100)}%"></div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        function renderShopSlots() {
+            const container = document.getElementById('shop-slots');
+            container.innerHTML = '';
+            const costBorder = { 1: 'border-slate-700 hover:border-slate-400', 2: 'border-emerald-600 hover:border-emerald-400', 3: 'border-sky-600 hover:border-sky-400', 4: 'border-purple-600 hover:border-purple-400', 5: 'border-amber-500 hover:border-amber-300' };
+
+            state.shop.forEach((p, idx) => {
+                const card = document.createElement('div');
+                if (!p) {
+                    card.className = 'bg-slate-950/50 border border-slate-900 rounded-3xl h-36 flex items-center justify-center text-sm text-slate-700 font-bold';
+                    card.innerText = '구매 완료';
+                } else {
+                    card.className = `bg-slate-950 hover:bg-slate-900 border-2 ${costBorder[p.cost]} rounded-3xl p-3 flex flex-col justify-between cursor-pointer transition transform hover:-translate-y-1 shadow-xl`;
+                    card.onclick = () => buyFromShop(idx);
+                    card.innerHTML = `
+                        <div class="flex justify-between items-center">
+                            <span class="text-xs font-bold px-2 py-0.5 rounded bg-slate-900 text-slate-300">${p.types[0]}</span>
+                            <span class="text-sm font-black text-amber-400">🪙 ${p.cost}G</span>
+                        </div>
+                        <div class="flex flex-col items-center my-1">
+                            <img src="${SPRITE_URL(p.dex)}" class="w-14 h-14 poke-sprite">
+                            <span class="text-sm font-black text-white mt-1">${p.name}</span>
+                        </div>
+                        <div class="text-xs text-center text-slate-400 font-bold truncate">${p.role}</div>
+                    `;
+                }
+                container.appendChild(card);
+            });
+        }
+
+        function renderUnitInspector() {
+            const btnSell = document.getElementById('btn-sell-unit');
+            const btnUnequip = document.getElementById('btn-unequip');
+            if (!state.selectedSlot) {
+                btnSell.classList.add('hidden');
+                btnUnequip.classList.add('hidden');
+                return;
+            }
+            const unit = state.selectedSlot.loc === 'board' ? state.allyBoard[state.selectedSlot.idx] : state.bench[state.selectedSlot.idx];
+            if (!unit) {
+                btnSell.classList.add('hidden');
+                btnUnequip.classList.add('hidden');
+                return;
+            }
+
+            const refund = unit.cost * (unit.star === 1 ? 1 : (unit.star === 2 ? 3 : 9));
+            btnSell.classList.remove('hidden');
+            btnSell.innerText = `판매 (+${refund}G)`;
+
+            if (unit.items.length > 0) {
+                btnUnequip.classList.remove('hidden');
+            } else {
+                btnUnequip.classList.add('hidden');
+            }
+
+            const equippedItemsHTML = unit.items.map(it => `<span class="bg-slate-900 border border-slate-700 px-2 py-1 rounded-xl text-xs text-amber-300 flex items-center gap-1">${it.icon} ${it.name}</span>`).join('');
+
+            const isTank = unit.role.includes('탱커');
+            const guideBadge = isTank 
+                ? `<span class="inline-block mt-1 text-xs font-extrabold px-3 py-1 rounded-xl bg-rose-500/20 text-rose-300 border border-rose-500/40">🛡️ 탱커 포켓몬 (1열 앞라인 추천)</span>`
+                : `<span class="inline-block mt-1 text-xs font-extrabold px-3 py-1 rounded-xl bg-sky-500/20 text-sky-300 border border-sky-500/40">🎯 딜러 포켓몬 (3열 뒷라인 추천)</span>`;
+
+            document.getElementById('unit-inspector').innerHTML = `
+                <div class="space-y-3 text-left">
+                    <div class="flex items-center gap-3">
+                        <img src="${SPRITE_URL(unit.dex)}" class="w-14 h-14 poke-sprite bg-slate-950 rounded-2xl p-1 border border-slate-800">
+                        <div>
+                            <div class="text-base font-black text-white">${unit.name} <span class="text-amber-400 text-sm">${'★'.repeat(unit.star)}</span></div>
+                            ${guideBadge}
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-4 gap-1.5 text-center bg-slate-950 p-2 rounded-2xl border border-slate-800 text-xs">
+                        <div><div class="text-slate-500">체력</div><div class="font-black text-emerald-400">${unit.maxHp}</div></div>
+                        <div><div class="text-slate-500">공격력</div><div class="font-black text-rose-400">${unit.atk}</div></div>
+                        <div><div class="text-slate-500">방어력</div><div class="font-black text-amber-400">${unit.armor}</div></div>
+                        <div><div class="text-slate-500">사거리</div><div class="font-black text-sky-400">${unit.range}칸</div></div>
+                    </div>
+                    <div class="bg-slate-950 p-3 rounded-2xl border border-slate-800 text-xs space-y-1.5">
+                        <div class="font-extrabold text-amber-300">✨ ${unit.skillName} (피해 ${unit.skillDmg})</div>
+                        <p class="text-slate-400 text-xs">${unit.skillDesc}</p>
+                        ${equippedItemsHTML ? `<div class="flex flex-wrap gap-1.5 mt-2 pt-2 border-t border-slate-800">${equippedItemsHTML}</div>` : ''}
+                    </div>
+                </div>
+            `;
+        }
+
+        function buildRecipeModal() {
+            const list = document.getElementById('recipe-list');
+            list.innerHTML = Object.entries(COMBINED_RECIPES).map(([key, val]) => {
+                const [k1, k2] = key.split('+');
+                const i1 = BASE_ITEMS[k1], i2 = BASE_ITEMS[k2];
+                return `
+                    <div class="bg-slate-950 border border-slate-800 p-3 rounded-2xl flex items-center justify-between">
+                        <div class="flex items-center gap-2 text-sm font-bold">
+                            <span>${i1?.icon || '📦'}</span><span>+</span><span>${i2?.icon || '📦'}</span>
+                            <span class="text-slate-500">➜</span>
+                            <span class="text-amber-300">${val.icon} ${val.name}</span>
+                        </div>
+                        <span class="text-xs text-slate-400">${val.desc}</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function toggleRecipeModal(show) {
+            const modal = document.getElementById('recipe-modal');
+            if (show) modal.classList.remove('hidden');
+            else modal.classList.add('hidden');
+        }
+    </script>
+</body>
+</html>
